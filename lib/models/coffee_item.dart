@@ -13,6 +13,14 @@ class CoffeeItem {
     required this.imageUrl,
   });
 
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'description': description,
+        'price': price,
+        'imageUrl': imageUrl,
+      };
+
   factory CoffeeItem.fromJson(Map<String, dynamic> json) {
     return CoffeeItem(
       id: json['id'] ?? 0,

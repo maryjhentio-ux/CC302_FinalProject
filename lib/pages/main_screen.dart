@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'home_page.dart';
 import 'detail_page.dart';
 import 'profile_page.dart';
@@ -13,21 +15,83 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  bool _isLoading = true;
 
-  // Centralized lists for Cart and Favorites state
-  final List<CoffeeItem> _cartItems = [];
-  final List<CoffeeItem> _favoriteItems = [];
+  List<CoffeeItem> _cartItems = [];
+  List<CoffeeItem> _favoriteItems = [];
 
-  void _addToCart(CoffeeItem item) {
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedData();
+  }
+
+  // Load login state, saved tab, cart, and favorites from local storage
+  Future<void> _loadSavedData() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+
+    // Load the last active tab index (default to 1 for List if logged in, 0 for Home if not)
+    int savedTab = prefs.getInt('saved_tab_index') ?? 1;
+
+    // Load Cart
+    final String? savedCart = prefs.getString('saved_cart');
+    if (savedCart != null) {
+      List decodedCart = json.decode(savedCart);
+      _cartItems = decodedCart.map((item) => CoffeeItem.fromJson(item)).toList();
+    }
+
+    // Load Favorites
+    final String? savedFavs = prefs.getString('saved_favorites');
+    if (savedFavs != null) {
+      List decodedFavs = json.decode(savedFavs);
+      _favoriteItems = decodedFavs.map((item) => CoffeeItem.fromJson(item)).toList();
+    }
+
+    setState(() {
+      if (isLoggedIn) {
+        _currentIndex = savedTab; // Restore the exact tab they were on!
+      } else {
+        _currentIndex = 0; // Home / Sign-In page
+      }
+      _isLoading = false;
+    });
+  }
+
+  // Save Cart to local storage using toJson()
+  Future<void> _saveCart() async {
+    final prefs = await SharedPreferences.getInstance();
+    List encodedCart = _cartItems.map((coffee) => coffee.toJson()).toList();
+    await prefs.setString('saved_cart', json.encode(encodedCart));
+  }
+
+  // Save Favorites to local storage using toJson()
+  Future<void> _saveFavorites() async {
+    final prefs = await SharedPreferences.getInstance();
+    List encodedFavs = _favoriteItems.map((coffee) => coffee.toJson()).toList();
+    await prefs.setString('saved_favorites', json.encode(encodedFavs));
+  }
+
+  Future<void> _handleSignInSuccess() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_logged_in', true);
+    await prefs.setInt('saved_tab_index', 1); // Set default tab to List upon sign-in
+    setState(() {
+      _currentIndex = 1;
+    });
+  }
+
+  void _addToCart(CoffeeItem item) async {
     setState(() {
       _cartItems.add(item);
     });
+    await _saveCart();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${item.name} added to Cart!')),
     );
   }
 
-  void _addToFavorites(CoffeeItem item) {
+  void _addToFavorites(CoffeeItem item) async {
     setState(() {
       if (!_favoriteItems.any((fav) => fav.id == item.id)) {
         _favoriteItems.add(item);
@@ -40,24 +104,35 @@ class _MainScreenState extends State<MainScreen> {
         );
       }
     });
+    await _saveFavorites();
   }
 
-  void _removeFromCart(int index) {
+  void _removeFromCart(int index) async {
     setState(() {
       _cartItems.removeAt(index);
     });
+    await _saveCart();
   }
 
-  void _removeFromFavorites(int index) {
+  void _removeFromFavorites(int index) async {
     setState(() {
       _favoriteItems.removeAt(index);
     });
+    await _saveFavorites();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: Colors.amber)),
+      );
+    }
+
     final List<Widget> screens = [
-      const HomePage(),
+      HomePage(
+        onSignInSuccess: _handleSignInSuccess,
+      ),
       DetailPage(
         onAddToCart: _addToCart,
         onAddToFav: _addToFavorites,
@@ -81,10 +156,13 @@ class _MainScreenState extends State<MainScreen> {
         selectedItemColor: Colors.brown[900],
         unselectedItemColor: Colors.brown[700],
         type: BottomNavigationBarType.fixed,
-        onTap: (index) {
+        onTap: (index) async {
           setState(() {
             _currentIndex = index;
           });
+          // Save the current tab index so it stays remembered on refresh
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('saved_tab_index', index);
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),

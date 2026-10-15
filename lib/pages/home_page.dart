@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  final VoidCallback? onSignInSuccess;
+
+  const HomePage({super.key, this.onSignInSuccess});
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +58,11 @@ class HomePage extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Successfully Signed In!')),
                     );
+                    
+                    // If the callback is provided, switch to the Menu/List tab (Index 1)
+                    if (onSignInSuccess != null) {
+                      onSignInSuccess!();
+                    }
                   },
                   child: const Text('Sign In', style: TextStyle(fontSize: 18, color: Colors.black)),
                 ),
